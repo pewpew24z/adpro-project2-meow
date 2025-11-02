@@ -9,6 +9,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import se233.project2.controller.GameLogger;
 import se233.project2.controller.SoundController;
 import se233.project2.controller.Updatable;
 import se233.project2.model.GameCharacter;
@@ -33,6 +34,9 @@ public class GameStage extends Pane implements Updatable {
 
     // ⭐ Sound controller
     private SoundController soundController;
+
+    // ⭐ Logger
+    private GameLogger logger;
 
     // ⭐ Callback สำหรับย้อนกลับไปหน้า Start Screen
     private Runnable onShowStartScreen;
@@ -79,6 +83,7 @@ public class GameStage extends Pane implements Updatable {
     public GameStage(Runnable onShowStartScreen) {
         this.onShowStartScreen = onShowStartScreen;
         this.soundController = SoundController.getInstance();
+        this.logger = GameLogger.getInstance();
 
         this.setPrefWidth(WIDTH);
         this.setPrefHeight(HEIGHT);
@@ -150,6 +155,9 @@ public class GameStage extends Pane implements Updatable {
         waitingForNextWave = false;
 
         currentStage = stage;
+
+        // Log stage start
+        logger.logStageStart(stage);
 
         // Background
         loadBackground(stage);
@@ -259,8 +267,12 @@ public class GameStage extends Pane implements Updatable {
         stageClearDelay--;
         if (stageClearDelay <= 0) {
             if (currentStage < 3) {
+                // Log stage complete
+                logger.logStageComplete(currentStage, uiHandler.getScore());
                 loadStage(currentStage + 1);
             } else {
+                // Log game complete
+                logger.logGameComplete(uiHandler.getScore());
                 showGameCompleted();
             }
         }
@@ -342,6 +354,7 @@ public class GameStage extends Pane implements Updatable {
         soundController.playBulletSound();
 
         double bulletX, bulletY, speedX, speedY;
+        String direction;
 
         if (player.isShootingUp()) {
             // ⭐ ยิงขึ้นตรง (จากหัวตัวละคร)
@@ -349,6 +362,7 @@ public class GameStage extends Pane implements Updatable {
             bulletY = player.getY();  // จากหัว
             speedX = 0;  // ไม่เคลื่อนที่แนวนอน
             speedY = -10;  // ยิงขึ้นตรง
+            direction = "UP";
         } else if (player.isShootingDown()) {
             // ⭐ ยิงเฉียงลง 45 องศา (จากตัวละคร)
             bulletX = player.getCenterX();
@@ -357,13 +371,18 @@ public class GameStage extends Pane implements Updatable {
             double speed = 10;
             speedX = (player.isFacingRight() ? 1 : -1) * speed * Math.cos(angle);
             speedY = speed * Math.sin(angle);  // ลง
+            direction = "DOWN";
         } else {
             // ⭐ ยิงตรง (ธรรมดา)
             bulletX = player.getCenterX() + (player.isFacingRight() ? 30 : -30);
             bulletY = player.getCenterY();
             speedX = player.isFacingRight() ? 10 : -10;
             speedY = 0;
+            direction = player.isFacingRight() ? "RIGHT" : "LEFT";
         }
+
+        // Log shooting action
+        logger.logShoot("Player", bulletX, bulletY, direction);
 
         Bullet bullet = new Bullet(playerBulletSprite, bulletX, bulletY, speedX, speedY, true);
         playerBullets.add(bullet);
@@ -380,6 +399,9 @@ public class GameStage extends Pane implements Updatable {
         double centerX = player.getCenterX();
         double centerY = player.getCenterY();
         double speed = 8;
+
+        // Log special attack
+        logger.logSpecialAttack("Player", centerX, centerY);
 
         // ⭐ ยิง 8 ทิศทาง (0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°)
         for (int i = 0; i < 8; i++) {
@@ -545,18 +567,38 @@ public class GameStage extends Pane implements Updatable {
     }
 
     private boolean checkEnemyHit(Bullet bullet) {
+        // Regular enemies - award 1 point when destroyed
         for (var enemy : enemyHandler.getRegularEnemies()) {
+            double prevHealth = enemy.getHealth();
             if (enemy.checkBulletCollision(bullet)) {
-                uiHandler.addScore(1);
+                logger.logBulletHit("Player", "RegularEnemy", bullet.getX(), bullet.getY());
                 createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when enemy is destroyed (health reaches 0)
+                if (!enemy.isAlive() && prevHealth > 0) {
+                    int points = 1;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logEnemyDefeated("RegularEnemy", points, newScore);
+                }
                 return true;
             }
         }
 
+        // Second-tier enemies - award 1 point when destroyed
         for (var enemy : enemyHandler.getSecondTierEnemies()) {
+            double prevHealth = enemy.getHealth();
             if (enemy.checkBulletCollision(bullet)) {
-                uiHandler.addScore(2);
+                logger.logBulletHit("Player", "SecondTierEnemy", bullet.getX(), bullet.getY());
                 createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when enemy is destroyed (health reaches 0)
+                if (!enemy.isAlive() && prevHealth > 0) {
+                    int points = 1;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logEnemyDefeated("SecondTierEnemy", points, newScore);
+                }
                 return true;
             }
         }
@@ -565,30 +607,79 @@ public class GameStage extends Pane implements Updatable {
     }
 
     private boolean checkBossHit(Bullet bullet) {
-        if (bossHandler.getWallBoss() != null && bossHandler.getWallBoss().checkBulletCollision(bullet)) {
-            uiHandler.addScore(1);
-            createExplosion(bullet.getX(), bullet.getY());
-            return true;
-        }
-
-        if (bossHandler.getJavaBoss() != null && bossHandler.getJavaBoss().checkBulletCollision(bullet)) {
-            uiHandler.addScore(1);
-            createExplosion(bullet.getX(), bullet.getY());
-            return true;
-        }
-
-        for (var boss : bossHandler.getActiveSmallBosses()) {
+        // WallBoss - award 3 points when destroyed
+        if (bossHandler.getWallBoss() != null) {
+            var boss = bossHandler.getWallBoss();
+            int prevHealth = boss.isAlive() ? 1 : 0;
             if (boss.checkBulletCollision(bullet)) {
-                uiHandler.addScore(3);
+                logger.logBulletHit("Player", "WallBoss", bullet.getX(), bullet.getY());
                 createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when boss is destroyed
+                if (!boss.isAlive() && prevHealth > 0) {
+                    int points = 3;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logBossDefeated("WallBoss", points, newScore);
+                }
                 return true;
             }
         }
 
-        if (bossHandler.getBoss3() != null && bossHandler.getBoss3().checkBulletCollision(bullet)) {
-            uiHandler.addScore(5);
-            createExplosion(bullet.getX(), bullet.getY());
-            return true;
+        // JavaBoss - award 3 points when destroyed
+        if (bossHandler.getJavaBoss() != null) {
+            var boss = bossHandler.getJavaBoss();
+            int prevHealth = boss.isAlive() ? 1 : 0;
+            if (boss.checkBulletCollision(bullet)) {
+                logger.logBulletHit("Player", "JavaBoss", bullet.getX(), bullet.getY());
+                createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when boss is destroyed
+                if (!boss.isAlive() && prevHealth > 0) {
+                    int points = 3;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logBossDefeated("JavaBoss", points, newScore);
+                }
+                return true;
+            }
+        }
+
+        // SmallBoss - award 2 points when destroyed
+        for (var boss : bossHandler.getActiveSmallBosses()) {
+            int prevHealth = boss.getHealth();
+            if (boss.checkBulletCollision(bullet)) {
+                logger.logBulletHit("Player", "SmallBoss", bullet.getX(), bullet.getY());
+                createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when boss is destroyed
+                if (!boss.isAlive() && prevHealth > 0) {
+                    int points = 2;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logBossDefeated("SmallBoss", points, newScore);
+                }
+                return true;
+            }
+        }
+
+        // Boss3 - award 5 points when destroyed
+        if (bossHandler.getBoss3() != null) {
+            var boss = bossHandler.getBoss3();
+            int prevHealth = boss.getHealth();
+            if (boss.checkBulletCollision(bullet)) {
+                logger.logBulletHit("Player", "Boss3", bullet.getX(), bullet.getY());
+                createExplosion(bullet.getX(), bullet.getY());
+
+                // Award score only when boss is destroyed
+                if (!boss.isAlive() && prevHealth > 0) {
+                    int points = 5;
+                    int newScore = uiHandler.getScore() + points;
+                    uiHandler.addScore(points);
+                    logger.logBossDefeated("Boss3", points, newScore);
+                }
+                return true;
+            }
         }
 
         return false;
@@ -642,9 +733,15 @@ public class GameStage extends Pane implements Updatable {
         playerLives--;
         uiHandler.createLiveIcons(playerLives);
 
+        // Log player hit
+        logger.logPlayerHit(playerLives);
+
         if (playerLives <= 0) {
             // ⭐ เล่นเสียงตาย
             soundController.playDeadSound();
+
+            // Log game over
+            logger.logGameOver(uiHandler.getScore());
 
             gameOver = true;
             showGameOver();

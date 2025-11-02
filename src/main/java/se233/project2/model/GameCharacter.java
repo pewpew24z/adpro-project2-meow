@@ -5,6 +5,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import se233.project2.controller.GameLogger;
 import se233.project2.view.GameStage;
 
 import java.util.List;
@@ -35,6 +36,9 @@ public class GameCharacter extends Pane {
     private AnimatedSprite walkShootUpSprite;
     private AnimatedSprite walkShootDownSprite;
     private AnimatedSprite dieSprite;
+
+    // Logger
+    private GameLogger logger;
 
     private int x;
     private int y;
@@ -69,6 +73,7 @@ public class GameCharacter extends Pane {
     public GameCharacter(int x, int y) {
         this.x = x;
         this.y = y;
+        this.logger = GameLogger.getInstance();
 
         // Load all sprites
         loadAllSprites();
@@ -208,16 +213,27 @@ public class GameCharacter extends Pane {
             return;
         }
 
+        // Store previous state for logging
+        boolean wasOnGround = onGround;
+        boolean wasFacingRight = facingRight;
+        boolean wasProne = isProne;
+
         // Horizontal movement (WASD controls)
         velocityX = 0;
 
         if (!isProne) {
             if (keys.isPressed(KeyCode.A)) {
                 velocityX = -MOVE_SPEED;
-                facingRight = false;
+                if (facingRight != false) {
+                    facingRight = false;
+                    logger.logDirectionChange("Player", "LEFT");
+                }
             } else if (keys.isPressed(KeyCode.D)) {
                 velocityX = MOVE_SPEED;
-                facingRight = true;
+                if (facingRight != true) {
+                    facingRight = true;
+                    logger.logDirectionChange("Player", "RIGHT");
+                }
             }
         }
 
@@ -225,10 +241,16 @@ public class GameCharacter extends Pane {
         if (keys.isPressed(KeyCode.W) && onGround) {
             velocityY = JUMP_FORCE;
             onGround = false;
+            logger.logJump("Player", x, y);
         }
 
         // Prone (S key)
         isProne = keys.isPressed(KeyCode.S) && onGround;
+        if (isProne && !wasProne) {
+            logger.logProne("Player");
+        } else if (!isProne && wasProne) {
+            logger.logStandUp("Player");
+        }
 
         // Shooting
         isShooting = keys.isPressed(KeyCode.SPACE);
@@ -258,6 +280,10 @@ public class GameCharacter extends Pane {
                 y = platform.getTop() - SPRITE_HEIGHT;
                 velocityY = 0;
                 onGround = true;
+                // Log landing
+                if (!wasOnGround) {
+                    logger.logLanding("Player", x, y);
+                }
                 break;
             }
         }
@@ -266,6 +292,9 @@ public class GameCharacter extends Pane {
         if (y >= GameStage.HEIGHT - SPRITE_HEIGHT) {
             y = GameStage.HEIGHT - SPRITE_HEIGHT;
             velocityY = 0;
+            if (!onGround && !wasOnGround) {
+                logger.logLanding("Player", x, y);
+            }
             onGround = true;
         }
 
@@ -355,6 +384,7 @@ public class GameCharacter extends Pane {
         isDead = true;
         velocityX = 0;
         velocityY = 0;
+        logger.logDeath("Player", x, y);
     }
 
     public double getCenterX() {
