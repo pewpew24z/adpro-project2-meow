@@ -1,38 +1,39 @@
 package se233.project2.model.boss;
 
+import javafx.geometry.Rectangle2D;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import se233.project2.model.AnimatedSprite;
 import se233.project2.model.item.Bullet;
 import javafx.scene.image.Image;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Boss3 (Last Boss) - บอสตัวสุดท้ายของ Stage 3
- * - อยู่นิ่งที่ตำแหน่งขวาสุด
- * - ใช้ภาพธรรมดา (ไม่มี animation) สำหรับตัว boss
- * - ยิงกระสุนเล็งไปที่ player โดยตรง (animated bullet)
- * - กระสุนที่ตกพื้นจะ Boom
+ * - ยิงกระสุน 5 ทิศทาง (ไม่เกิน 180°) สุ่ม x2 หรือ x3
+ * - ยิง weapon พุ่งตรงไปที่ผู้เล่น
+ * - Weapon animation 10 frames (custom width)
  */
 public class Boss3 extends Pane {
-    private ImageView bossImageView;  // ⭐ เปลี่ยนจาก AnimatedSprite เป็น ImageView ธรรมดา
+    private ImageView bossImageView;
     private Circle fallbackCircle;
-    private AnimatedSprite weaponEffect;
+    private CustomWeaponSprite weaponEffect;
 
     private Image bossImage;
     private Image weaponSprite;
     private Image bulletSprite;
 
     private double x, y;
-    private double width = 500;   // ⭐ ขยายให้ใหญ่เกือบเต็มจอ
-    private double height = 500;  // ⭐ ขยายให้ใหญ่เกือบเต็มจอ
+    private double width = 500;
+    private double height = 500;
     private int health;
     private int maxHealth;
     private boolean alive = true;
+    private Random random = new Random();
 
     // Animation (เฉพาะ weapon effect)
     private int weaponAnimationTick = 0;
@@ -40,17 +41,15 @@ public class Boss3 extends Pane {
 
     // Shooting
     private List<AnimatedBullet> bullets;
+    private List<WeaponProjectile> weapons;  // ✨ เพิ่ม weapon projectiles
     private long lastShoot = 0;
-    private long shootInterval = 1_200_000_000; // 1.2 วินาที
+    private long lastWeaponShoot = 0;  // ✨ แยก cooldown
+    private long shootInterval = 1_200_000_000; // 1.2 วินาที (bullet)
+    private long weaponInterval = 2_000_000_000L; // 2 วินาที (weapon)
 
     // Player tracking
     private double playerX = 0;
     private double playerY = 0;
-
-    // Weapon sprite sheet
-    private static final int WEAPON_FRAMES = 3;
-    private static final int WEAPON_WIDTH = 32;
-    private static final int WEAPON_HEIGHT = 32;
 
     public Boss3(Image bossImage, Image weaponSprite, Image bulletSprite,
                  double x, double y, int maxHealth) {
@@ -62,6 +61,7 @@ public class Boss3 extends Pane {
         this.weaponSprite = weaponSprite;
         this.bulletSprite = bulletSprite;
         this.bullets = new ArrayList<>();
+        this.weapons = new ArrayList<>();
 
         setupSprite();
         this.setTranslateX(x);
@@ -70,7 +70,6 @@ public class Boss3 extends Pane {
 
     private void setupSprite() {
         if (bossImage != null) {
-            // ⭐ ใช้ ImageView ธรรมดาสำหรับ boss (ไม่มี animation)
             bossImageView = new ImageView(bossImage);
             bossImageView.setFitWidth(width);
             bossImageView.setFitHeight(height);
@@ -78,29 +77,19 @@ public class Boss3 extends Pane {
             bossImageView.setSmooth(false);
             this.getChildren().add(bossImageView);
 
-            // ⭐ Weapon effect ยังคงเป็น animated sprite
+            // ✨ Weapon effect - custom animation sprite
             if (weaponSprite != null) {
-                weaponEffect = new AnimatedSprite(
-                        weaponSprite,
-                        WEAPON_FRAMES,
-                        WEAPON_FRAMES,
-                        0, 0,
-                        WEAPON_WIDTH,
-                        WEAPON_HEIGHT,
-                        WEAPON_WIDTH,
-                        WEAPON_HEIGHT
-                );
-                weaponEffect.setFitWidth(150);  // ⭐ ขยาย weapon effect
-                weaponEffect.setFitHeight(150);
-                weaponEffect.setPreserveRatio(true);
+                weaponEffect = new CustomWeaponSprite(weaponSprite);
+                weaponEffect.setFitWidth(100);
+                weaponEffect.setFitHeight(120);
+                weaponEffect.setPreserveRatio(false);
                 weaponEffect.setSmooth(false);
-                weaponEffect.setTranslateX(-120);  // ⭐ ปรับตำแหน่ง weapon
-                weaponEffect.setTranslateY(height / 2 - 75);  // ⭐ กลางตัว boss
+                weaponEffect.setTranslateX(180);  // ใกล้ตำแหน่งยิง
+                weaponEffect.setTranslateY(100);
                 weaponEffect.setVisible(false);
                 this.getChildren().add(weaponEffect);
             }
         } else {
-            // Fallback - แสดงวงกลม
             fallbackCircle = new Circle(width / 2, Color.DARKRED);
             this.getChildren().add(fallbackCircle);
         }
@@ -109,34 +98,44 @@ public class Boss3 extends Pane {
     public void update(long now) {
         if (!alive) return;
 
-        // ⭐ Boss3 stays stationary (no movement)
-        // ⭐ Boss sprite ไม่มี animation (ไม่ต้อง update)
-
-        // Update weapon animation (ถ้ากำลังแสดงอยู่)
+        // Update weapon animation
         if (weaponEffect != null && weaponEffect.isVisible()) {
             updateWeaponAnimation();
         }
 
-        // ⭐ Shooting - aim at player
+        // ✨ Bullet shooting (5 ทิศทาง, สุ่ม x2 หรือ x3)
         if (now - lastShoot > shootInterval) {
-            shootAtPlayer();
+            shootBulletPattern();
             lastShoot = now;
         }
 
+        // ✨ Weapon shooting (พุ่งตรงไปที่ผู้เล่น)
+        if (now - lastWeaponShoot > weaponInterval) {
+            shootWeaponAtPlayer();
+            lastWeaponShoot = now;
+        }
+
         // Update bullets
-        List<AnimatedBullet> toRemove = new ArrayList<>();
+        List<AnimatedBullet> bulletsToRemove = new ArrayList<>();
         for (AnimatedBullet bullet : bullets) {
             bullet.update();
             if (!bullet.isActive()) {
-                toRemove.add(bullet);
+                bulletsToRemove.add(bullet);
             }
         }
-        bullets.removeAll(toRemove);
+        bullets.removeAll(bulletsToRemove);
+
+        // ✨ Update weapons
+        List<WeaponProjectile> weaponsToRemove = new ArrayList<>();
+        for (WeaponProjectile weapon : weapons) {
+            weapon.update();
+            if (!weapon.isActive()) {
+                weaponsToRemove.add(weapon);
+            }
+        }
+        weapons.removeAll(weaponsToRemove);
     }
 
-    /**
-     * Update weapon effect animation only
-     */
     private void updateWeaponAnimation() {
         weaponAnimationTick++;
         if (weaponAnimationTick >= ANIMATION_SPEED) {
@@ -145,40 +144,72 @@ public class Boss3 extends Pane {
         }
     }
 
-    private void shootAtPlayer() {
+    /**
+     * ✨ ยิงกระสุน 5 ทิศทาง (ไม่เกิน 180°) สุ่ม x2 หรือ x3
+     */
+    private void shootBulletPattern() {
+        double bulletX = x + 220;
+        double bulletY = y + 150;
+        double baseSpeed = 7;
+
+        // ✨ สุ่มจำนวนรอบ: 2 หรือ 3
+        int rounds = random.nextBoolean() ? 2 : 3;
+
+        for (int round = 0; round < rounds; round++) {
+            //0-359 degree
+            for (int i = 0; i < 5; i++) {
+                double angle = Math.toRadians(random.nextInt(360)); // 0–359 องศา
+                double vx = baseSpeed * Math.cos(angle);
+                double vy = baseSpeed * Math.sin(angle);
+
+                AnimatedBullet bullet = new AnimatedBullet(
+                        bulletSprite,
+                        bulletX,
+                        bulletY,
+                        vx,
+                        vy
+                );
+                bullets.add(bullet);
+            }
+
+        }
+
+        System.out.println("🔥 Boss3 fired " + rounds + " rounds of 5-direction bullets!");
+    }
+
+    /**
+     * ✨ ยิง weapon พุ่งตรงไปที่ผู้เล่น จากพิกัด (220, 130)
+     */
+    private void shootWeaponAtPlayer() {
         // Show weapon effect
         if (weaponEffect != null) {
             weaponEffect.setVisible(true);
             weaponEffect.reset();
         }
 
-        // ⭐ ยิงจากหน้าท้อง (stomach area of sprite)
-        // Sprite coordinates: x=83, y=63, width=23, height=22
-        double bulletX = x + 83 + 11.5;  // x + 83 + (width/2) for center of stomach
-        double bulletY = y + 63 + 11;    // y + 63 + (height/2) for center of stomach
+        // ✨ ยิงจากพิกัด x=220, y=130
+        double weaponX = x + 220;
+        double weaponY = y + 130;
 
-        // ⭐ ยิงกระสุน 3 ลูกพร้อมกัน: ตรงลง, เอียงซ้าย, เอียงขวา
-        double baseSpeed = 7;
+        // ✨ คำนวณทิศทางไปหาผู้เล่น
+        double dx = playerX - weaponX;
+        double dy = playerY - weaponY;
+        double distance = Math.sqrt(dx * dx + dy * dy);
 
-        // ลูกที่ 1: ตรงลง (vy > 0)
-        double vx1 = 0;
-        double vy1 = baseSpeed;
-        AnimatedBullet bullet1 = new AnimatedBullet(bulletSprite, bulletX, bulletY, vx1, vy1);
-        bullets.add(bullet1);
+        if (distance > 0) {
+            double speed = 8;
+            double vx = (dx / distance) * speed;
+            double vy = (dy / distance) * speed;
 
-        // ลูกที่ 2: เอียงซ้าย (vx < 0, vy > 0)
-        double angle2 = Math.toRadians(45); // 45 องศา
-        double vx2 = -baseSpeed * Math.sin(angle2);
-        double vy2 = baseSpeed * Math.cos(angle2);
-        AnimatedBullet bullet2 = new AnimatedBullet(bulletSprite, bulletX, bulletY, vx2, vy2);
-        bullets.add(bullet2);
-
-        // ลูกที่ 3: เอียงขวา (vx > 0, vy > 0)
-        double angle3 = Math.toRadians(45); // 45 องศา
-        double vx3 = baseSpeed * Math.sin(angle3);
-        double vy3 = baseSpeed * Math.cos(angle3);
-        AnimatedBullet bullet3 = new AnimatedBullet(bulletSprite, bulletX, bulletY, vx3, vy3);
-        bullets.add(bullet3);
+            WeaponProjectile weapon = new WeaponProjectile(
+                    weaponSprite,
+                    weaponX,
+                    weaponY,
+                    vx,
+                    vy
+            );
+            weapons.add(weapon);
+        }
 
         // Hide weapon effect after delay
         new Thread(() -> {
@@ -191,6 +222,8 @@ public class Boss3 extends Pane {
                 e.printStackTrace();
             }
         }).start();
+
+        System.out.println("⚔️ Boss3 fired weapon towards player!");
     }
 
     public void setPlayerPosition(double playerX, double playerY) {
@@ -238,11 +271,20 @@ public class Boss3 extends Pane {
 
     // Getters
     public boolean isAlive() { return alive; }
+
     public List<Bullet> getBullets() {
-        // Convert to List<Bullet> for compatibility
-        return new ArrayList<>(bullets);
+        // ✨ รวม bullets และ weapons เข้าด้วยกัน
+        List<Bullet> allProjectiles = new ArrayList<>();
+        allProjectiles.addAll(bullets);
+        allProjectiles.addAll(weapons);
+        return allProjectiles;
     }
-    public void removeBullet(Bullet bullet) { bullets.remove(bullet); }
+
+    public void removeBullet(Bullet bullet) {
+        bullets.remove(bullet);
+        weapons.remove(bullet);
+    }
+
     public double getX() { return x; }
     public double getY() { return y; }
     public double getBossWidth() { return width; }
@@ -250,34 +292,66 @@ public class Boss3 extends Pane {
     public int getHealth() { return health; }
 
     /**
-     * AnimatedBullet - Inner class สำหรับกระสุนที่มี animation (4 frames)
-     * boss3_bullet.png: 4 frames แนวนอน
+     * ✨ Custom Weapon Sprite - 10 frames with variable widths
+     */
+    private class CustomWeaponSprite extends ImageView {
+        private Image spriteSheet;
+        private int currentFrame = 0;
+        private final int TOTAL_FRAMES = 10;
+
+        // ✨ Frame data: [x, y, width, height]
+        private final int[][] frames = {
+                {0, 0, 16, 22},      // Frame 1
+                {15, 0, 14, 22},     // Frame 2
+                {31, 0, 18, 22},     // Frame 3
+                {50, 0, 18, 22},     // Frame 4
+                {69, 0, 18, 22},     // Frame 5
+                {90, 0, 18, 22},     // Frame 6
+                {108, 0, 18, 22},    // Frame 7
+                {127, 0, 18, 22},    // Frame 8
+                {147, 0, 18, 22},    // Frame 9
+                {167, 0, 18, 22}     // Frame 10
+        };
+
+        public CustomWeaponSprite(Image sprite) {
+            this.spriteSheet = sprite;
+            this.setImage(sprite);
+            updateViewport();
+        }
+
+        public void tick() {
+            currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+            updateViewport();
+        }
+
+        public void reset() {
+            currentFrame = 0;
+            updateViewport();
+        }
+
+        private void updateViewport() {
+            int[] frame = frames[currentFrame];
+            this.setViewport(new Rectangle2D(frame[0], frame[1], frame[2], frame[3]));
+        }
+    }
+
+    /**
+     * AnimatedBullet - กระสุนธรรมดา (4 frames)
      */
     private class AnimatedBullet extends Bullet {
-        private AnimatedSprite bulletSprite;
+        private CustomBulletSprite bulletSprite;
         private int animTick = 0;
         private final int ANIM_SPEED = 4;
+        private static final double PLATFORM_Y = 585;
 
         public AnimatedBullet(Image sprite, double x, double y, double vx, double vy) {
             super(sprite, x, y, vx, vy, false);
 
             if (sprite != null) {
                 this.getChildren().clear();
-                // ⭐ boss3_bullet.png: 4 frames, width=40, height=36
-                // frame 1: x=0, frame 2: x=40, frame 3: x=80, frame 4: x=120
-                bulletSprite = new AnimatedSprite(
-                        sprite,
-                        4,      // totalColumns = 4 frames
-                        4,      // frameCount = 4 frames
-                        0,      // offsetX = 0
-                        0,      // offsetY = 0
-                        40,     // width = 40 (ตามที่ระบุ)
-                        36,     // height = 36 (ตามที่ระบุ)
-                        40,     // spacingX = 40 (เฟรมถัดไปอยู่ที่ +40)
-                        36      // spacingY = 36
-                );
-                bulletSprite.setFitWidth(60);  // ⭐ ขยาย bullet
-                bulletSprite.setFitHeight(54);  // ⭐ รักษา aspect ratio (60/40 * 36 = 54)
+                bulletSprite = new CustomBulletSprite(sprite);
+                bulletSprite.setFitWidth(60);
+                bulletSprite.setFitHeight(54);
                 bulletSprite.setPreserveRatio(true);
                 bulletSprite.setSmooth(false);
                 this.getChildren().add(bulletSprite);
@@ -286,6 +360,12 @@ public class Boss3 extends Pane {
 
         @Override
         public void update() {
+            if (this.getY() >= PLATFORM_Y) {
+                this.setVerticalSpeed(0);
+                this.deactivate();
+                return;
+            }
+
             super.update();
 
             if (bulletSprite != null) {
@@ -295,6 +375,74 @@ public class Boss3 extends Pane {
                     bulletSprite.tick();
                 }
             }
+        }
+    }
+
+    /**
+     * ✨ WeaponProjectile - weapon ที่พุ่งตรงไปหาผู้เล่น
+     */
+    private class WeaponProjectile extends Bullet {
+        private CustomBulletSprite weaponSprite;
+        private int animTick = 0;
+        private final int ANIM_SPEED = 4;
+        private static final double PLATFORM_Y = 585;
+
+        public WeaponProjectile(Image sprite, double x, double y, double vx, double vy) {
+            super(sprite, x, y, vx, vy, false);
+
+            if (sprite != null) {
+                this.getChildren().clear();
+                weaponSprite = new CustomBulletSprite(sprite);
+                weaponSprite.setFitWidth(60);
+                weaponSprite.setFitHeight(54);
+                weaponSprite.setPreserveRatio(true);
+                weaponSprite.setSmooth(false);
+                this.getChildren().add(weaponSprite);
+            }
+        }
+
+        @Override
+        public void update() {
+            if (this.getY() >= PLATFORM_Y) {
+                this.setVerticalSpeed(0);
+                this.deactivate();
+                return;
+            }
+
+            super.update();
+
+            if (weaponSprite != null) {
+                animTick++;
+                if (animTick >= ANIM_SPEED) {
+                    animTick = 0;
+                    weaponSprite.tick();
+                }
+            }
+        }
+    }
+
+    /**
+     * Custom Bullet Sprite - 4 frames
+     */
+    private class CustomBulletSprite extends ImageView {
+        private Image spriteSheet;
+        private int currentFrame = 0;
+        private final int TOTAL_FRAMES = 4;
+
+        public CustomBulletSprite(Image sprite) {
+            this.spriteSheet = sprite;
+            this.setImage(sprite);
+            updateViewport();
+        }
+
+        public void tick() {
+            currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+            updateViewport();
+        }
+
+        private void updateViewport() {
+            int x = currentFrame * 40;
+            this.setViewport(new Rectangle2D(x, 0, 40, 36));
         }
     }
 }

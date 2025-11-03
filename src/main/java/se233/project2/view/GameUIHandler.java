@@ -89,6 +89,15 @@ public class GameUIHandler {
         scoreLabel.addScore(points);
     }
 
+    /**
+     * ⭐ ตั้งค่า score โดยตรง (ใช้สำหรับเก็บ score ข้าม stage)
+     */
+    public void setScore(int score) {
+        if (scoreLabel != null) {
+            scoreLabel.setScore(score);
+        }
+    }
+
     public void clear() {
         gamePane.getChildren().remove(scoreLabel);
         gamePane.getChildren().remove(stageLabel);
@@ -101,6 +110,6 @@ public class GameUIHandler {
     }
 
     public int getScore() {
-        return scoreLabel.getScore();
+        return scoreLabel != null ? scoreLabel.getScore() : 0;
     }
 }

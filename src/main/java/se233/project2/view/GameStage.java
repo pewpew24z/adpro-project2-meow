@@ -110,7 +110,11 @@ public class GameStage extends Pane implements Updatable {
         liveIconSprite = loadImage("effect/live.png");
     }
 
+    // ในไฟล์ GameStage.java
+// แก้ไขส่วน loadStage() และ setupHandlers()
+
     private void setupHandlers() {
+        // ⭐ สร้าง uiHandler เพียงครั้งเดียวตอน setup
         uiHandler = new GameUIHandler(this, liveIconSprite);
 
         enemyHandler = new EnemyHandler(this,
@@ -138,8 +142,12 @@ public class GameStage extends Pane implements Updatable {
     }
 
     private void loadStage(int stage) {
+        // ⭐ เก็บ score เดิมไว้ก่อน clear
+        int previousScore = (uiHandler != null) ? uiHandler.getScore() : 0;
+
         this.getChildren().clear();
         playerBullets.clear();
+        specialBullets.clear();
         platforms.clear();
         explosions.clear();
 
@@ -171,8 +179,12 @@ public class GameStage extends Pane implements Updatable {
         }
 
         spawnMinions(stage);
+
+        // ⭐ Re-initialize UI และเก็บ score เดิมไว้
         uiHandler.initialize(stage);
+        uiHandler.setScore(previousScore);  // คืนค่า score เดิม
         uiHandler.createLiveIcons(playerLives);
+
         this.getChildren().add(player);
     }
 
@@ -202,7 +214,6 @@ public class GameStage extends Pane implements Updatable {
             platforms.add(new Platform(0, 390, 193, 329));
             platforms.add(new Platform(195, 504, 1085, 216));
         } else if (stage == 3) {
-            // ⭐ Stage 3 มี platform เดียว ครอบคลุมทั้งหน้าจอ
             platforms.add(new Platform(0, 585, 1280, 135));
         }
     }

@@ -4,12 +4,17 @@ import javafx.scene.control.Label;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import se233.project2.model.ScoreModel;
 
+/**
+ * Score - UI Component สำหรับแสดงคะแนน
+ * ใช้ ScoreModel จัดการ logic ภายใน
+ */
 public class Score extends Label {
-    private int score;
+    private ScoreModel scoreModel;
 
     public Score(int x, int y) {
-        this.score = 0;
+        this.scoreModel = new ScoreModel();
         this.setTranslateX(x);
         this.setTranslateY(y);
         this.setFont(Font.font("Arial", FontWeight.BOLD, 24));
@@ -17,21 +22,48 @@ public class Score extends Label {
         updateDisplay();
     }
 
+    /**
+     * เพิ่มคะแนน
+     */
     public void addScore(int points) {
-        score += points;
+        scoreModel.addScore(points);
         updateDisplay();
     }
 
+    /**
+     * ตั้งค่าคะแนนโดยตรง (สำหรับ restore ระหว่าง stage)
+     */
+    public void setScore(int newScore) {
+        scoreModel.setScore(newScore);
+        updateDisplay();
+    }
+
+    /**
+     * รีเซ็ตคะแนน
+     */
     public void resetScore() {
-        score = 0;
+        scoreModel.resetScore();
         updateDisplay();
     }
 
+    /**
+     * อัพเดตการแสดงผล
+     */
     private void updateDisplay() {
-        this.setText("SCORE: " + score);
+        this.setText("SCORE: " + scoreModel.getScore());
     }
 
+    /**
+     * ดึงค่าคะแนนปัจจุบัน
+     */
     public int getScore() {
-        return score;
+        return scoreModel.getScore();
+    }
+
+    /**
+     * ดึง ScoreModel (สำหรับการทดสอบหรือ logic อื่นๆ)
+     */
+    public ScoreModel getModel() {
+        return scoreModel;
     }
 }

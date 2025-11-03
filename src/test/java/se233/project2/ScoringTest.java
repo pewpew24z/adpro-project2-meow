@@ -2,20 +2,20 @@ package se233.project2;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import se233.project2.view.Score;
+import se233.project2.model.ScoreModel;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for Scoring system
- * Tests score tracking, addition, and reset functionality
+ * ✅ แก้ไขให้ทดสอบ ScoreModel แทน Score (ไม่ต้องพึ่ง JavaFX)
  */
 public class ScoringTest {
-    private Score score;
+    private ScoreModel score;
 
     @BeforeEach
     public void setUp() {
-        score = new Score(0, 0);
+        score = new ScoreModel();
     }
 
     @Test
@@ -87,6 +87,15 @@ public class ScoringTest {
 
         score.resetScore();
         assertEquals(0, score.getScore(), "Score should be 0 after reset");
+    }
+
+    @Test
+    public void testSetScore() {
+        score.setScore(50);
+        assertEquals(50, score.getScore(), "Score should be 50 after setScore(50)");
+
+        score.setScore(100);
+        assertEquals(100, score.getScore(), "Score should be 100 after setScore(100)");
     }
 
     @Test
@@ -184,12 +193,28 @@ public class ScoringTest {
     }
 
     @Test
-    public void testNegativeScoreNotAllowed() {
-        // Try to add negative score (should still add it as per implementation)
+    public void testScorePersistenceBetweenStages() {
+        // Simulate stage transitions
+        // Stage 1 completion
+        score.setScore(6);
+        assertEquals(6, score.getScore());
+
+        // Stage 2 completion (add to existing)
+        score.addScore(8);
+        assertEquals(14, score.getScore());
+
+        // Stage 3 completion (add to existing)
+        score.addScore(11);
+        assertEquals(25, score.getScore(), "Score should persist and accumulate across stages");
+    }
+
+    @Test
+    public void testNegativeScoreHandling() {
+        // Try to add negative score
         score.addScore(-10);
 
         // This test verifies current behavior
-        // If you want to prevent negative scores, modify Score class accordingly
+        // Score allows negative values (implementation choice)
         assertEquals(-10, score.getScore(), "Negative score is added as per current implementation");
     }
 
@@ -223,5 +248,41 @@ public class ScoringTest {
 
         score.resetScore();
         assertEquals(0, score.getScore(), "Score should be 0 after second reset");
+    }
+
+    @Test
+    public void testSetScoreOverwrite() {
+        // Test that setScore overwrites existing score
+        score.addScore(50);
+        assertEquals(50, score.getScore());
+
+        score.setScore(100); // Should overwrite, not add
+        assertEquals(100, score.getScore(), "setScore should overwrite existing score");
+    }
+
+    @Test
+    public void testSetScoreThenAdd() {
+        // Test combining setScore and addScore
+        score.setScore(10);
+        assertEquals(10, score.getScore());
+
+        score.addScore(5);
+        assertEquals(15, score.getScore(), "addScore should work correctly after setScore");
+    }
+
+    @Test
+    public void testHasScore() {
+        // Test new hasScore method
+        score.setScore(50);
+
+        assertTrue(score.hasScore(50), "Should have score >= 50");
+        assertTrue(score.hasScore(30), "Should have score >= 30");
+        assertFalse(score.hasScore(51), "Should not have score >= 51");
+    }
+
+    @Test
+    public void testToString() {
+        score.setScore(42);
+        assertEquals("Score: 42", score.toString(), "toString should format correctly");
     }
 }
