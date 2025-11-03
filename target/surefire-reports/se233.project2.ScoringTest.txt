@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: se233.project2.ScoringTest
+-------------------------------------------------------------------------------
+Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in se233.project2.ScoringTest
